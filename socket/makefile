@@ -1,10 +1,10 @@
 all: pcServer pxaClient 
 
 pcServer: pcServer.cpp
-	g++ pcServer.cpp -g -lpthread -o pcServer
+	g++ pcServer.cpp -g -D DEBUG -lpthread -o pcServer
 
 pxaClient: pxaClient.cpp
-	g++ pxaClient.cpp -g -lpthread -o pxaClient
+	g++ pxaClient.cpp -g -D DEBUG -lpthread -o pxaClient
 
 server: server.cpp
 	g++ server.cpp -o server

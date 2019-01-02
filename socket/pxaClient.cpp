@@ -14,7 +14,7 @@
 #define PORT_NUM 10000
 #define INPUT_BUFFER_SIZE 1024
 #define IMAGE_NAME "output"
-#define NUM_CLIENTS 1
+#define NUM_CLIENTS 2
 
 void* clientRoutine(void* no);
 
@@ -31,14 +31,14 @@ int main(int argc, char* argv[])
 
 	for(int i=0; i<NUM_CLIENTS; ++i){
 		
-		std::cout << "Main thread creating client #" << i+1 << std::endl;
+		std::cout << "Main thread creating client #" << i << std::endl;
 		
 		rc = pthread_create(&clients[i], &thread_attr, &clientRoutine, (void *)&i);
 		if(rc){
 			perror("fail to create client");
 			exit(EXIT_FAILURE);
 		}
-
+		usleep(1000);
 	}
 	
 	/* destroy thread attribute and waiting for other threads */
@@ -49,7 +49,7 @@ int main(int argc, char* argv[])
 			perror("fail to thread join");
 			exit(EXIT_FAILURE);
 		}
-		std::cout << "Main thread join with client #" << i+1 << std::endl;
+		std::cout << "Main thread join with client #" << i << std::endl;
 	}
 	
 	pthread_exit(NULL);
@@ -64,13 +64,14 @@ void* clientRoutine(void* no){
 
 	strcpy(outfile_name, IMAGE_NAME);
 	strcat(outfile_name, num);
-	strcat(outfile_name, ".png");
+	strcat(outfile_name, ".xwd");
 
 	int sockfd;
 	struct sockaddr_in sockInfo; 
 	char inputBuffer[INPUT_BUFFER_SIZE];
+	char outputBuffer[] = "sendata";
 
-for(int i=0; i<100; ++i){
+//for(int i=0; i<1000; ++i){
 	std::memset(inputBuffer, 0, INPUT_BUFFER_SIZE);
 
 	sockfd = 0;
@@ -91,16 +92,40 @@ for(int i=0; i<100; ++i){
 		exit(EXIT_FAILURE);
 	}
 	
+	/* keep transfering data */
+	int count = 0;
 	int ret;
-	FILE* out_image = fopen(outfile_name, "wb");
-	while((ret = recv(sockfd, inputBuffer, INPUT_BUFFER_SIZE, 0)) > 0){
-		/* write to file */
-		fwrite(inputBuffer, 1, ret, out_image);
-	}
-	fclose(out_image);
-	close(sockfd);	
-}
+	FILE* out_image;
+    while(1){
+		ret = send(sockfd, outputBuffer, 8, 0);
+		bool isFirst = true;
+		while((ret = recv(sockfd, inputBuffer, INPUT_BUFFER_SIZE, 0)) > 0){
+			if(isFirst){
+#ifdef DEBUG
+				std::cout << "\t * count [" << number << "] = " << ++count << std::endl;
+				std::cout << "open file: " << outfile_name << std::endl;
+#endif
+				out_image = fopen(outfile_name, "wb"); 	 
+				isFirst = false;
+			}
+			/* write to file */
+			fwrite(inputBuffer, 1, ret, out_image);
+
+			if(ret < INPUT_BUFFER_SIZE)		break;
+		}
+		if (!isFirst){
+#ifdef DEBUG
+			std::cout << "closing file: " << outfile_name << std::endl;
+#endif
+			fclose(out_image);
+		}
+#ifdef DEBUG
+		if(count >= 1000) break;
+#endif
+    }
+    //close(sockfd);	
+//}
 	delete [] outfile_name;
-	std::cout << "Exist client ...\n";
+	std::cout << "Exist client#" << number << " ...\n";
 	pthread_exit(NULL);
 }

@@ -10,16 +10,23 @@
 #include <stdlib.h>
 #include <cstring>
 
-#define SERVER_ADDR "127.0.0.1"
-#define PORT_NUM 10000
 #define WAIT_QUEUE_SIZE 5
 #define OUTPUT_BUFFER_SIZE 1024
 #define IMAGE_NAME "sh"
+#define CAPTURE_IMG "xwd -root -out sh.xwd"
 
 void* serverRoutine(void* new_socket);
 
 int main(int argc, char* argv[])
 {
+	if (argc < 3){
+		std::cerr << "Usage: ./pcServer <ip_address> <port_num>\n";
+		exit(-1);
+	}
+
+	char* SERVER_ADDR = argv[1];
+	int PORT_NUM = atoi(argv[2]);
+	
 	/* pthread variables */
 	pthread_t tid;
 	pthread_attr_t thread_attr;
@@ -89,25 +96,47 @@ void* serverRoutine(void* new_socket){
 	int client_sockfd = *((int *)new_socket);
 
 	char outputBuffer[OUTPUT_BUFFER_SIZE];
+	char inputBuffer[8];
+	std::memset(&inputBuffer, 0, 8);
 	std::memset(&outputBuffer, 0, OUTPUT_BUFFER_SIZE);
 	
 	char* filename = new char [sizeof(IMAGE_NAME) + 4];
 	strcpy(filename, IMAGE_NAME);
+	strcat(filename, ".xwd");
 
-	FILE* image_file = fopen(strcat(filename, ".png"), "rb");
+	int count = 0;
 	int ret;
-	
-	while(!feof(image_file)){
-		/* send whole image file to client */
-		ret = fread(outputBuffer, 1, OUTPUT_BUFFER_SIZE, image_file);
-		send(client_sockfd, outputBuffer, ret, 0);
+	FILE* image_file;
+	while(1){
+		ret = recv(client_sockfd, inputBuffer, 8, 0);
+		if(strcmp(inputBuffer, "sendata") != 0){
+			std::cerr << "ERROR; Header " << std::endl;
+			continue;
+		}
+#ifdef DEBUG
+		
+		std::cout << "\t * [" << client_sockfd << "]i = " << ++count << std::endl;
+#endif
+		system(CAPTURE_IMG);
+		image_file = fopen(filename, "rb");
+		
+		while(!feof(image_file)){
+			/* send whole image file to client */
+			ret = fread(outputBuffer, 1, OUTPUT_BUFFER_SIZE, image_file);
+			send(client_sockfd, outputBuffer, ret, 0);
+		}
+
+		fclose(image_file);
+#ifdef DEBUG
+		if(count >= 1000) break;
+#endif
 	}
 
-	fclose(image_file);
 	close(client_sockfd);
+
 	delete [] filename;
 
-	std::cout << "  * send complete ! Exit thread ..." << std::endl;
+	std::cout << "  * send complete ! Exit thread [client sockfd: " << client_sockfd << "] ..." << std::endl;
 
 	pthread_exit(NULL);
 }
