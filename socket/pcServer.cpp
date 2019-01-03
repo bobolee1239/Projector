@@ -13,7 +13,10 @@
 #define WAIT_QUEUE_SIZE 5
 #define OUTPUT_BUFFER_SIZE 1024
 #define IMAGE_NAME "sh"
-#define CAPTURE_IMG "xwd -root -out sh.xwd"
+#define CAPTURE_IMG "screencapture -x "
+#define EXTENSION ".png"
+#define NUM_TESTS 50
+
 
 void* serverRoutine(void* new_socket);
 
@@ -101,25 +104,47 @@ void* serverRoutine(void* new_socket){
 	std::memset(&outputBuffer, 0, OUTPUT_BUFFER_SIZE);
 	
 	char* filename = new char [sizeof(IMAGE_NAME) + 4];
+	char* command = new char [sizeof(CAPTURE_IMG) + 5];
+
+	std::memset(filename, 0, sizeof(IMAGE_NAME) + 4);
+	std::memset(command, 0, sizeof(CAPTURE_IMG) + 5);
+
 	strcpy(filename, IMAGE_NAME);
-	strcat(filename, ".xwd");
+#ifdef DEBUG
+	char num[2] = {'0'};
+	num[0] = client_sockfd + '0';
+	strcat(filename, num);
+#endif
+	strcat(filename, EXTENSION);
+	
+	strcpy(command, CAPTURE_IMG);
+	strcat(command, filename);
 
 	int count = 0;
 	int ret;
 	FILE* image_file;
+	int* file_size = new int [1];
 	while(1){
 		ret = recv(client_sockfd, inputBuffer, 8, 0);
 		if(strcmp(inputBuffer, "sendata") != 0){
 			std::cerr << "ERROR; Header " << std::endl;
 			continue;
 		}
-#ifdef DEBUG
-		
-		std::cout << "\t * [" << client_sockfd << "]i = " << ++count << std::endl;
-#endif
-		system(CAPTURE_IMG);
+		system(command);
 		image_file = fopen(filename, "rb");
 		
+		/* check file size */
+		std::memset(file_size, 0, sizeof(*file_size));
+		fseek(image_file, 0, SEEK_END);
+		*file_size = ftell(image_file);
+		fseek(image_file, 0, SEEK_SET);			// set back to origin
+		
+#ifdef DEBUG
+		std::cout << "\t * [" << client_sockfd << "]i = " << ++count << ", file size: " << *file_size  << std::endl;
+#endif
+		/* send file size to client */
+		send(client_sockfd, file_size, sizeof(*file_size), 0);
+
 		while(!feof(image_file)){
 			/* send whole image file to client */
 			ret = fread(outputBuffer, 1, OUTPUT_BUFFER_SIZE, image_file);
@@ -128,13 +153,15 @@ void* serverRoutine(void* new_socket){
 
 		fclose(image_file);
 #ifdef DEBUG
-		if(count >= 1000) break;
+		if(count >= NUM_TESTS) break;
 #endif
 	}
 
 	close(client_sockfd);
 
 	delete [] filename;
+	delete [] command;
+	delete [] file_size;
 
 	std::cout << "  * send complete ! Exit thread [client sockfd: " << client_sockfd << "] ..." << std::endl;
 
